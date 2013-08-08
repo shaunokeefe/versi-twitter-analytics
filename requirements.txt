@@ -1,0 +1,7 @@
+python-twitter
+celery
+redis
+pytz==2013b
+pymongo
+flask
+virtualenvwrapper
