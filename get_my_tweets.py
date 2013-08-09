@@ -14,10 +14,13 @@ class Collection(object):
     def __init__(self, db_name='collection_db', collection_name='collection_collection'):
         self.oldest_id = None
         self.newest_id = None
-        self.has_reached_bottom = False
+        self.backfill = True
         self.db_client = MongoClient()
         self.db = self.db_client[db_name]
         self.collection = self.db[collection_name]
+        self.id_field_name = 'id'
+        self.add_list = []
+        self.item_cache = []
 
     def set_oldest(self, id):
         self.oldest_id = id
@@ -27,104 +30,86 @@ class Collection(object):
 
     def clean_to_dict(self, item):
         item_dict = item.AsDict()
-        item_dict['_id'] = tweet_dict['id']
-        for key in ['urls', 'retweeted_status']:
-            try:
-                item_dict.pop(key)
-            except:
-                pass
+        item_dict_cleaned = {}
+        item_dict_cleaned['_id'] = item_dict[self.id_field_name]
+        for key in self.add_list:
+            item_dict_cleaned[key] = item_dict.get(key, None)
 
-    def save(self, items):
-        for item in items:
-            item_dict = clean_to_dict(item)
-            try:
-       	        id = self.collection.insert(item_dict)
-            except DuplicateKeyError:
-                pass
-        newest =items[0]
-        oldest =items[-1]
+        return item_dict_cleaned
+
+    def add_extra_fields(self, item):
+        return item
+
+    def fetch(self, num=200):
+        if self.backfill:
+            self.item_cache.extend(self.get_older(num=num))
+            if not self.item_cache:
+                self.backfill = False
+                return
+        else:
+            self.item_cache.extend(self.get_newer(num=num))
+
+        newest = self.item_cache[0]
+        oldest = self.item_cache[-1]
 
         if newest.id > self.newest_id or self.newest_id is None:
             self.set_newest(newest.id)
         if oldest.id < self.oldest_id or self.oldest_id is None:
             self.set_oldest(oldest.id)
 
+    def has_items(self):
+        return self.item_cache is not []
+
+    def save_item(self, item):
+        item_dict = self.clean_to_dict(item)
+        item_dict = self.add_extra_fields(item_dict)
+        try:
+            id = self.collection.insert(item_dict)
+        except DuplicateKeyError:
+            pass
+
+    def save_items(self):
+        failed = []
+
+        while self.item_cache:
+            try:
+                item = self.item_cache.pop()
+                self.save_item(item)
+            except:
+                failed.extend(item)
+        self.item_cache = failed
+
     def process(self, num=200):
-        if not self.has_reached_bottom:
-            items = self.get_older(num=num)
-            if not items:
-                self.has_reached_bottom = True
-                return
-        else:
-            return
-            items = self.get_newer(num=num)
-        self.save(items)
+        self.fetch(num=num)
+
+        if self.has_items():
+            self.save_items()
 
     def get_newer(self, num=200):
-        user_tweets = api.GetUserTimeline(screen_name=SETTINGS['ACCOUNT_DISPLAY_NAME'], since_id=self.newest_id, count=num)
-        return user_tweets
+        raise NotImplementedError()
 
     def get_older(self, num=200):
-        kwargs = {'count': num, 'screen_name': SETTINGS['ACCOUNT_DISPLAY_NAME']}
-        if self.oldest_id:
-            kwargs['max_id'] = self.oldest_id - 1
-        user_tweets = api.GetUserTimeline(**kwargs)
-        return user_tweets
+        raise NotImplementedError()
 
 class TweetCollection(Collection):
     def __init__(self, db_name='tweet_db', collection_name='tweet_collection'):
-        self.oldest_id = None
-        self.newest_id = None
-        self.has_reached_bottom = False
-        self.db_client = MongoClient()
-        self.db = self.db_client[db_name]
-        self.collection = self.db[collection_name]
-
-    def set_oldest(self, id):
-        self.oldest_id = id
-
-    def set_newest(self, id):
-        self.newest_id = id
-
-    def save(self, tweets):
-        for tweet in tweets:
-            tweet_dict = tweet.AsDict()
-            tweet_dict['_id'] = tweet_dict['id']
-            for key in ['urls', 'retweeted_status']:
-                try:
-                    tweet_dict.pop(key)
-                except:
-                    pass
-            try:
-       	        id = self.collection.insert(tweet_dict)
-            except DuplicateKeyError:
-                pass
-        newest =tweets[0]
-        oldest =tweets[-1]
-
-        if newest.id > self.newest_id or self.newest_id is None:
-            self.set_newest(newest.id)
-        if oldest.id < self.oldest_id or self.oldest_id is None:
-            self.set_oldest(oldest.id)
-
-    def process(self, num=200):
-        if not self.has_reached_bottom:
-            tweets = self.get_older(num=num)
-            if not tweets:
-                self.has_reached_bottom = True
-                return
-        else:
-            return
-            tweets = self.get_newer(num=num)
-        self.save(tweets)
+        super(TweetCollection, self ).__init__(db_name=db_name, collection_name=collection_name)
+        self.add_fields = ['name', 'text']
+        self.id_field_name = 'id'
 
     def get_newer(self, num=200):
-        user_tweets = api.GetUserTimeline(screen_name=SETTINGS['ACCOUNT_DISPLAY_NAME'], since_id=self.newest_id, count=num)
+        try:
+            user_tweets = api.GetUserTimeline(screen_name=SETTINGS['ACCOUNT_DISPLAY_NAME'])
+        except:
+            return []
         return user_tweets
 
     def get_older(self, num=200):
         kwargs = {'count': num, 'screen_name': SETTINGS['ACCOUNT_DISPLAY_NAME']}
         if self.oldest_id:
             kwargs['max_id'] = self.oldest_id - 1
-        user_tweets = api.GetUserTimeline(**kwargs)
+        try:
+            user_tweets = api.GetUserTimeline(screen_name=SETTINGS['ACCOUNT_DISPLAY_NAME'])
+        except:
+            return []
         return user_tweets
