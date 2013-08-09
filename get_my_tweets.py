@@ -149,3 +149,5 @@ class UserCollection(Collection):
     def get_older(self, num=200):
         pass
 
+def get_rate_limit():
+    return api.GetRateLimitStatus()
