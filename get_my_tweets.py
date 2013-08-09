@@ -1,4 +1,5 @@
 import twitter
+from geopy import geocoders
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from settings import SETTINGS
@@ -113,3 +114,38 @@ class TweetCollection(Collection):
         except:
             return []
         return user_tweets
+
+class UserCollection(Collection):
+
+    def __init__(self, db_name='tweet_db', collection_name='user_collection'):
+        super(UserCollection, self).__init__(db_name=db_name, collection_name=collection_name)
+        self.add_list = ['followers_count', 'location', 'name', 'screen_name', 'created_at', 'time_zone']
+        self.id_field_name = 'id'
+        self.backfill = False
+
+    def add_extra_fields(self, item):
+        item = super(UserCollection, self).add_extra_fields(item)
+        if item.get('location', False):
+            g = geocoders.GoogleV3()
+            try:
+                geocodes = g.geocode(item['location'], exactly_one = False)
+                for geocode in geocodes:
+                    place, (lat, lon) = geocode
+                    item['latitude'] = lat
+                    item['longitude'] = lon
+            except:
+                # Probably just some lame riddle ('Everywhere. lol!') so give up
+                pass
+        return item
+
+    def get_newer(self, num=200):
+        kwargs = {'skip_status':True}
+        try:
+            followers = api.GetFollowers(**kwargs)
+        except:
+            return []
+        return followers
+
+    def get_older(self, num=200):
+        pass
+
