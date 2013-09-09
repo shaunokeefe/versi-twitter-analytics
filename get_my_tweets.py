@@ -96,7 +96,7 @@ class Collection(object):
 class TweetCollection(Collection):
     def __init__(self, db_name='tweet_db', collection_name='tweet_collection'):
         super(TweetCollection, self ).__init__(db_name=db_name, collection_name=collection_name)
-        self.add_fields = ['name', 'text']
+        self.add_list = ['name', 'text']
         self.id_field_name = 'id'
 
     def get_newer(self, num=200):
