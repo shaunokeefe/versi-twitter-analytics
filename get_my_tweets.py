@@ -50,16 +50,17 @@ class Collection(object):
         else:
             self.item_cache.extend(self.get_newer(num=num))
 
-        newest = self.item_cache[0]
-        oldest = self.item_cache[-1]
+        if not self.item_cache == []:
+            newest = self.item_cache[0]
+            oldest = self.item_cache[-1]
 
-        if newest.id > self.newest_id or self.newest_id is None:
-            self.set_newest(newest.id)
-        if oldest.id < self.oldest_id or self.oldest_id is None:
-            self.set_oldest(oldest.id)
+            if newest.id > self.newest_id or self.newest_id is None:
+                self.set_newest(newest.id)
+            if oldest.id < self.oldest_id or self.oldest_id is None:
+                self.set_oldest(oldest.id)
 
     def has_items(self):
-        return self.item_cache is not []
+        return not self.item_cache == []
 
     def save_item(self, item):
         item_dict = self.clean_to_dict(item)
