@@ -5,3 +5,4 @@ pytz==2013b
 pymongo
 flask
 virtualenvwrapper
+geopy
